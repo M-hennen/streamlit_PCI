@@ -1,0 +1,15 @@
+<PAMDataset>
+  <Metadata>
+    <MDI key="OVR_RESAMPLING_ALG">NEAREST</MDI>
+  </Metadata>
+  <PAMRasterBand band="1">
+    <Description>Abergavenny_S1_2023_Summer</Description>
+    <Metadata>
+      <MDI key="STATISTICS_MAXIMUM">-5.159637928009</MDI>
+      <MDI key="STATISTICS_MEAN">-12.977813635191</MDI>
+      <MDI key="STATISTICS_MINIMUM">-23.53896522522</MDI>
+      <MDI key="STATISTICS_STDDEV">3.4922611069337</MDI>
+      <MDI key="STATISTICS_VALID_PERCENT">100</MDI>
+    </Metadata>
+  </PAMRasterBand>
+</PAMDataset>
