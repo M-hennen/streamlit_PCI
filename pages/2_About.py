@@ -3,7 +3,7 @@ import leafmap.foliumap as leafmap
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
-from todays_weather import weather, forecast
+from weather_functions import weather, forecast
 
 st.set_page_config(layout="wide")
 

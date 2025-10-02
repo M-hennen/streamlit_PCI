@@ -179,8 +179,8 @@ url = "https://www.metoffice.gov.uk/public/data/PWSCache/WarningsRSS/Region/UK"
 feed = feedparser.parse(url)
 
 # Climate / NDVI CSVs
-clim_data = pd.read_csv("data2/climate_data/Abergavenny_climate_data.csv", parse_dates=["date"])
-ndvi_data = pd.read_csv("data2/NDVI/ndvi_time_series.csv")
+clim_data = pd.read_csv("data2/Abergavenny_climate_data.csv", parse_dates=["date"])
+ndvi_data = pd.read_csv("data2/ndvi_time_series.csv")
 
 # Today's date / season
 today = pd.Timestamp.now().normalize()
