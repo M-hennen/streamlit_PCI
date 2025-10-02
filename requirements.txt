@@ -3,3 +3,12 @@ geopandas
 leafmap
 owslib
 streamlit
+xarray
+rasterio
+fiona
+localtileserver
+nbformat
+plotly
+pandas
+numpy
+requests

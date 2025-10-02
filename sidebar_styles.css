@@ -1,0 +1,20 @@
+/* Change the sidebar background color */
+[data-testid="stSidebar"] {
+    background-color: #066648; /* Dark green background */
+}
+
+/* Change font color for all text in the sidebar */
+[data-testid="stSidebar"] * {
+    color: white !important; /* Force all text in the sidebar to be white */
+}
+
+/* Change font color for the pages menu links */
+[data-testid="stSidebarNav"] a {
+    color: white !important; /* Ensure links in the pages menu are white */
+    font-size: 16px; /* Adjust font size if needed */
+}
+
+/* Optional: Change hover color for the pages menu links */
+[data-testid="stSidebarNav"] a:hover {
+    color: #00ffcc !important; /* Light cyan on hover */
+}
