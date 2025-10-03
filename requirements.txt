@@ -1,3 +1,4 @@
+--find-links=https://girder.github.io/large_image_wheels GDAL
 geopandas
 leafmap
 owslib
@@ -11,4 +12,3 @@ plotly
 pandas
 numpy
 requests
-GDAL==3.7.0
