@@ -75,8 +75,8 @@ s1_rasters = {
 s1_rasters[34] = ['Latest_Radar', 'data2/latest/Abergavenny_S1_VV_2025-10-02_latest_harm_cog.tif']
 
 symb_dict = {
-    "NDVI": ["RdYlGn", (0.2, 0.8)],
-    "Radar": ["Greys_r", (-18, -4)],
+    "NDVI": ["rdylgn", (0.2, 0.8)],
+    "Radar": ["gray_r", (-18, -4)],
 }
 
 # -----------------------------------------------------------
@@ -225,7 +225,7 @@ with col2:
                 bands=[1],
                 vmin=-np.nanmax(np.abs(delta)),
                 vmax=np.nanmax(np.abs(delta)),
-                colormap="RdYlGn",
+                colormap="rdylgn",
                 layer_name=f"ΔNDVI Change",
                 opacity=1,
             )

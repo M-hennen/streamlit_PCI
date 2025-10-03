@@ -1,9 +1,11 @@
 --find-links=https://girder.github.io/large_image_wheels GDAL
-setuptools
+setuptools>=68.0.0
+psutil>=5.9.0
 geopandas
 owslib
 streamlit==1.29.0
 leafmap==0.21.0
+localtileserver
 xarray
 rasterio
 fiona
