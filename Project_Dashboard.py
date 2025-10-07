@@ -175,7 +175,7 @@ st.sidebar.write(markdown)
 # Load external data
 # -----------------------------
 # Warnings feed
-url = "https://www.metoffice.gov.uk/public/data/PWSCache/WarningsRSS/Region/UK"
+url = "https://www.metoffice.gov.uk/public/data/PWSCache/WarningsRSS/Region/wl"
 feed = feedparser.parse(url)
 
 # Climate / NDVI CSVs
