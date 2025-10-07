@@ -206,12 +206,15 @@ with col2:
     esri_satellite = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
     m.add_tile_layer(url=esri_satellite, name="Esri Satellite", attribution="Tiles © Esri")
 
+    test_url = "https://dea-public-data.s3.ap-southeast-2.amazonaws.com/baseline/ga_ls8c_ard_3/091/084/2020/01/07/ga_ls8c_nbart_3-1-0_091084_2020-01-07_final_band02.tif"
+
     if not os.path.exists(dataset[selected_date][1]):
         st.error(f"Raster file not found: {dataset[selected_date][1]}")
     else:
         # Add main raster
         m.add_raster(
-            dataset[selected_date][1],
+            test_url,
+            # dataset[selected_date][1],
             bands=[1],
             vmin=symb_dict[choice][1][0], 
             vmax=symb_dict[choice][1][1], 
