@@ -272,7 +272,11 @@ with col1:
     # Timeseries expander
     with st.expander("Show timeseries"):
         fig, ax = plt.subplots(figsize=(6, 3))
-        ax.plot(seasons_grouped.apply(lambda row: f"{row['year']}_{row['season']}", axis=1), seasons_grouped["value"], marker="o", linestyle="-")
+        seasons_mean = ndvi_data[ndvi_data['year'] != today.year].groupby(['season'])['value'].mean().reset_index()
+        year_ndvi = ndvi_data[ndvi_data['year'] == today.year].groupby(['season'])['value'].mean().reset_index()
+        ax.plot(seasons_mean['season'], seasons_mean['value'], color='gray', linestyle="-")
+        ax.plot(year_ndvi['season'], year_ndvi['value'], color='darkgreen', linestyle="--", marker="o", label=f"{today.year}")
+        # ax.plot(seasons_grouped.apply(lambda row: f"{row['year']}_{row['season']}", axis=1), seasons_grouped["value"], marker="o", linestyle="-")
         ax.set_xlabel("Season")
         ax.set_ylabel("Mean NDVI")
         ax.set_title("NDVI Seasonal Time Series")
