@@ -174,7 +174,7 @@ st.sidebar.write(markdown)
 # -----------------------------
 # Load external data
 # -----------------------------
-# Warnings feed
+# Warnings feeds
 url = "https://www.metoffice.gov.uk/public/data/PWSCache/WarningsRSS/Region/wl"
 feed = feedparser.parse(url)
 
