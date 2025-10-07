@@ -6,6 +6,7 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 import rasterio
+from PIL import Image
 
 # -----------------------------------------------------------
 # Streamlit Config
@@ -207,6 +208,22 @@ with col2:
     m.add_tile_layer(url=esri_satellite, name="Esri Satellite", attribution="Tiles © Esri")
 
     test_url = "https://dea-public-data.s3.ap-southeast-2.amazonaws.com/baseline/ga_ls8c_ard_3/091/084/2020/01/07/ga_ls8c_nbart_3-1-0_091084_2020-01-07_final_band02.tif"
+
+    with rasterio.open(test_url) as src:
+        data = src.read(1)
+        profile = src.profile
+
+    # Normalize the data to 0–255 for display
+    arr = data.astype(float)
+    arr_min, arr_max = np.nanmin(arr), np.nanmax(arr)
+    scaled = ((arr - arr_min) / (arr_max - arr_min) * 255).astype(np.uint8)
+
+    # Convert to PIL image
+    img = Image.fromarray(scaled)
+
+    # Show the image
+    st.image(img, caption="band2 (COG)", use_column_width=True)
+
 
     if not os.path.exists(dataset[selected_date][1]):
         st.error(f"Raster file not found: {dataset[selected_date][1]}")
