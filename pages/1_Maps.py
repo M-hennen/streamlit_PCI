@@ -6,6 +6,8 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 import rasterio
+from streamlit_folium import st_folium
+import folium
 from PIL import Image
 
 # -----------------------------------------------------------
@@ -207,27 +209,36 @@ with col2:
     esri_satellite = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
     m.add_tile_layer(url=esri_satellite, name="Esri Satellite", attribution="Tiles © Esri")
 
-    test_url = "https://dea-public-data.s3.ap-southeast-2.amazonaws.com/baseline/ga_ls8c_ard_3/091/084/2020/01/07/ga_ls8c_nbart_3-1-0_091084_2020-01-07_final_band02.tif"
+    test_url = "https://github.com/M-hennen/streamlit_PCI/blob/main/data2/latest/Abergavenny_NDVI_2025-09-30_latest_harm_cog.tif"
 
-    with rasterio.open(test_url) as src:
-        data = src.read(1)
-        profile = src.profile
-
-    # Normalize the data to 0–255 for display
-    arr = data.astype(float)
-    arr_min, arr_max = np.nanmin(arr), np.nanmax(arr)
-    scaled = ((arr - arr_min) / (arr_max - arr_min) * 255).astype(np.uint8)
-
-    # Convert to PIL image
-    img = Image.fromarray(scaled)
-
-    # Show the image
-    st.image(img, caption="band2 (COG)", use_column_width=True)
 
 
     if not os.path.exists(dataset[selected_date][1]):
         st.error(f"Raster file not found: {dataset[selected_date][1]}")
     else:
+        # with rasterio.open(dataset[selected_date][1]) as src:
+        #     data = src.read(1)
+        #     profile = src.profile
+
+        # # Normalize the data to 0–255 for display
+        # arr = data.astype(float)
+        # arr_min, arr_max = np.nanmin(arr), np.nanmax(arr)
+        # scaled = ((arr - arr_min) / (arr_max - arr_min) * 255).astype(np.uint8)
+
+        # # Convert to PIL image
+        # img = Image.fromarray(scaled)
+
+        # # Show the image
+        # st.image(img, caption="band2 (COG)", use_column_width=True)
+
+        
+
+        # m = folium.Map(location=[34.17, 78.01], zoom_start=12)
+        # folium.GeoJson("https://your-url.com/path/to/boundary.geojson").add_to(m)
+
+        # st_data = st_folium(m, width=700, height=500)
+
+
         # Add main raster
         m.add_raster(
             test_url,
