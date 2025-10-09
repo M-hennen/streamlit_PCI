@@ -200,19 +200,41 @@ with col2:
     date_id = ndvi_rasters[selected_date][0]
     st.write(f"Displaying rasters for: {date_id}")
 
-    m = leafmap.Map(basemap="Esri.WorldImagery")
+    # m = leafmap.Map(basemap="Esri.WorldImagery")
 
-    # Add basemap
-    esri_satellite = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-    m.add_tile_layer(url=esri_satellite, name="Esri Satellite", attribution="Tiles © Esri")
+    # # Add basemap
+    # esri_satellite = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+    # m.add_tile_layer(url=esri_satellite, name="Esri Satellite", attribution="Tiles © Esri")
 
-    test_url = "https://github.com/M-hennen/streamlit_PCI/blob/main/data2/latest/Abergavenny_NDVI_2025-09-30_latest_harm_cog.tif"
+    # Use the TiTiler demo endpoint. Replace this if needed.
+    # os.environ["TITILER_ENDPOINT"] = "https://giswqs-titiler-endpoint.hf.space"
+
+    # test_url = "https://github.com/M-hennen/streamlit_PCI/blob/main/data2/latest/Abergavenny_NDVI_2025-09-30_latest_harm_cog.tif"
+    # test_url = "https://raw.githubusercontent.com/M-hennen/streamlit_PCI/main/data2/latest/Abergavenny_NDVI_2025-09-30_latest_harm_cog.tif"
+    # m.add_cog_layer(
+    #     test_url, bands=[0])
+    # m    
+
+    os.environ["TITILER_ENDPOINT"] = "https://giswqs-titiler-endpoint.hf.space"
+
+    m = leafmap.Map(center=[51.787, -3.023], zoom=14, basemap="Esri.WorldImagery")
+
+    test_url = "https://raw.githubusercontent.com/M-hennen/streamlit_PCI/main/data2/latest/Abergavenny_NDVI_2025-09-30_latest_harm_cog.tif"
+
+    # Single-band grayscale
+    m.add_cog_layer(
+        test_url,
+        bands=[1],
+        name="NDVI (COG)",
+        colormap_name="rdylgn"
+    )
+
+    m.to_streamlit(height=500)
 
 
-
-    if not os.path.exists(dataset[selected_date][1]):
-        st.error(f"Raster file not found: {dataset[selected_date][1]}")
-    else:
+    # if not os.path.exists(dataset[selected_date][1]):
+    #     st.error(f"Raster file not found: {dataset[selected_date][1]}")
+    # else:
         # with rasterio.open(dataset[selected_date][1]) as src:
         #     data = src.read(1)
         #     profile = src.profile
@@ -236,33 +258,33 @@ with col2:
         # st_data = st_folium(m, width=700, height=500)
 
 
-        # Add main raster
-        m.add_raster(
-            test_url,
-            # dataset[selected_date][1],
-            bands=[1],
-            vmin=symb_dict[choice][1][0], 
-            vmax=symb_dict[choice][1][1], 
-            colormap=symb_dict[choice][0], 
-            layer_name=f"{choice} {date_id}",
-            opacity=0.7,
-        )
-        if st.session_state.change_detection and selected_date != compare_date:
-            m.add_raster(
-                delta_path,
-                bands=[1],
-                vmin=-np.nanmax(np.abs(delta)),
-                vmax=np.nanmax(np.abs(delta)),
-                colormap="rdylgn",
-                layer_name=f"ΔNDVI Change",
-                opacity=1,
-            )
+        # # Add main raster
+        # m.add_raster(
+        #     test_url,
+        #     # dataset[selected_date][1],
+        #     bands=[1],
+        #     vmin=symb_dict[choice][1][0], 
+        #     vmax=symb_dict[choice][1][1], 
+        #     colormap=symb_dict[choice][0], 
+        #     layer_name=f"{choice} {date_id}",
+        #     opacity=0.7,
+        # )
+        # if st.session_state.change_detection and selected_date != compare_date:
+        #     m.add_raster(
+        #         delta_path,
+        #         bands=[1],
+        #         vmin=-np.nanmax(np.abs(delta)),
+        #         vmax=np.nanmax(np.abs(delta)),
+        #         colormap="rdylgn",
+        #         layer_name=f"ΔNDVI Change",
+        #         opacity=1,
+        #     )
 
-    region = "data2/TR0001_01_TR0001_01_boundary.geojson"
-    m.add_geojson(region, layer_name="AOI")
-    m.add_layer_control()
-    m.zoom_to_bounds(ndvi_rasters[selected_date][1])
-    m.to_streamlit(height=500)
+    # region = "data2/TR0001_01_TR0001_01_boundary.geojson"
+    # m.add_geojson(region, layer_name="AOI")
+    # m.add_layer_control()
+    # m.zoom_to_bounds(ndvi_rasters[selected_date][1])
+    # m.to_streamlit(height=500)
 
     st.markdown(
         """
