@@ -6,9 +6,6 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 import rasterio
-from streamlit_folium import st_folium
-import folium
-from PIL import Image
 
 # -----------------------------------------------------------
 # Streamlit Config
