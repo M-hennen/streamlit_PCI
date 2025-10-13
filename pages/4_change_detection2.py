@@ -104,12 +104,8 @@ st.write(f"COG URL: {cog_url}")
 region = "data2/TR0001_01_TR0001_01_boundary.geojson"
 m = leafmap.Map(center=[51.787, -3.023], basemap="Esri.WorldImagery")
 m.add_cog_layer(before_url, bands=[1], name="NDVI Before", colormap_name="rdylgn")
-
 m.add_cog_layer(after_url, bands=[1], name="NDVI After", colormap_name="rdylgn")
-
-
 m.add_cog_layer(cog_url, bands=[1], name="ΔNDVI Change", colormap_name="rdylgn", opacity=0.7)
-
 m.add_geojson(region, layer_name="AOI")
 m.add_layer_control()
 m.zoom_to_bounds("NDVI After")
