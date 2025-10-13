@@ -16,4 +16,4 @@ pandas
 numpy
 requests
 feedparser
-pillow
+PyGithub
