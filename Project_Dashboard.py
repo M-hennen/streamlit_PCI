@@ -179,15 +179,15 @@ url = "https://www.metoffice.gov.uk/public/data/PWSCache/WarningsRSS/Region/wl"
 feed = feedparser.parse(url)
 
 # Climate / NDVI CSVs
-clim_data = pd.read_csv("data2/Abergavenny_climate_data.csv", parse_dates=["date"])
-ndvi_data = pd.read_csv("data2/ndvi_time_series.csv")
+url_path = "https://storage.googleapis.com/pci_rasters/"
+clim_data = pd.read_csv(f"{url_path}Abergavenny_climate_data_oct25.csv", parse_dates=["date"])
+ndvi_data = pd.read_csv(f"{url_path}ndvi_time_series_oct25.csv")
 
 # Today's date / season
 today = pd.Timestamp.now().normalize()
 todays_season = get_season()
 
 # Debug prints (kept)
-print(ndvi_data.head())
 print("Today's date:", today)
 print("Feed title:", feed.feed.get("title"))
 print("Number of entries:", len(feed.entries))
@@ -249,7 +249,7 @@ col1, col2, col3 = st.columns([1,1,1])
 
 # Vegetation / NDVI panel
 with col1:
-    st.header("Vegetation Health")
+    st.header("Vegetation")
     st.markdown("<p style='margin-top:-10px; font-size:16px;'>Seasonal NDVI</p>", unsafe_allow_html=True)
 
     # aggregated seasonal NDVI (kept original logic)
