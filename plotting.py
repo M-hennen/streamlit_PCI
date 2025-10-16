@@ -1,4 +1,8 @@
 import plotly.graph_objects as go
+# from branca.colormap import LinearColormap
+# from branca.element import MacroElement, Template
+import folium
+from branca.colormap import LinearColormap
 
 # Define classification thresholds and colors
 SPEI_CLASSES = [
@@ -160,3 +164,46 @@ def plot_ndvi_gauge(val, previous_val=None, seasonal_val=None, title="NDVI"):
         }
     ))
     return fig
+
+
+
+
+def add_styled_colorbar(m, colors, vmin, vmax, caption="", position="bottomright"):
+    """Add a styled colorbar to a leafmap folium map with white background and border."""
+    # Create the color scale
+    colormap = LinearColormap(colors=colors, vmin=vmin, vmax=vmax, caption=caption)
+    
+    # HTML for styled box
+    html = f"""
+    <div style="
+        background-color: rgba(255, 255, 255, 0.9);
+        border: 1px solid rgba(0,0,0,0.3);
+        border-radius: 6px;
+        padding: 8px 12px;
+        box-shadow: 0px 1px 5px rgba(0,0,0,0.3);
+        font-size: 13px;
+        line-height: 1.2;
+        ">
+        <b>{caption}</b><br>
+        {colormap._repr_html_()}
+    </div>
+    """
+
+    colorbar = folium.Element(html)
+
+    # Attach to correct corner
+    from branca.element import Figure, MacroElement, Template
+
+    template = Template(f"""
+    {{% macro html(this, kwargs) %}}
+        <div style="position: absolute; {position}: 20px; z-index: 9999;">
+            {html}
+        </div>
+    {{% endmacro %}}
+    """)
+    
+    macro = MacroElement()
+    macro._template = template
+    m.get_root().add_child(macro)
+    return m
+

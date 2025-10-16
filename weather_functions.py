@@ -5,7 +5,7 @@ import streamlit as st
 import os
 import re
 
-API_KEY = st.secrets["API_KEY"] 
+API_KEY = st.secrets["api"]["API_KEY"] 
 # API_KEY = os.environ.get("OPEN_WEATHER_API")
 
 # Convert wind direction deg into compass direction
