@@ -2,10 +2,17 @@ import streamlit as st
 import leafmap.foliumap as leafmap
 import tempfile
 import numpy as np
+from rio_cogeo.cogeo import cog_translate
+from rio_cogeo.profiles import cog_profiles
+from github import Github
 import os
+import geopandas as gpd
 import pandas as pd
 import matplotlib.pyplot as plt
+from google.cloud import storage
+import matplotlib as mpl
 import rasterio
+from plotting import add_styled_colorbar
 
 # -----------------------------------------------------------
 # Streamlit Config
@@ -44,6 +51,32 @@ def save_temp_raster(array: np.ndarray, profile: dict, suffix: str) -> str:
         dst.write(array.astype(rasterio.float32), 1)
     return tmpfile.name
 
+def custom_colourbar(cmap_name, vmin, vmax, label="Value", label_fontsize=20, tick_fontsize=18):
+    """Create and display a custom colorbar in Streamlit using Matplotlib."""
+    # Create a Matplotlib figure and an Axes object
+    fig, ax = plt.subplots(figsize=(6, 1))  # Small, wide figure for a horizontal colorbar
+    fig.subplots_adjust(bottom=0.5)  # Adjust layout to make space for label
+
+    # Get the colormap
+    cmap = plt.get_cmap(cmap_name)
+
+    # Create normalization for the value range
+    norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
+
+    # Create the colorbar
+    cb = mpl.colorbar.ColorbarBase(
+        ax,
+        cmap=cmap,
+        norm=norm,
+        orientation='horizontal'
+    )
+
+    # Style the label and tick fonts
+    cb.set_label(label, fontsize=label_fontsize, labelpad=10)
+    cb.ax.tick_params(labelsize=tick_fontsize)
+
+    return fig
+
 # -----------------------------------------------------------
 # Sidebar Setup
 # -----------------------------------------------------------
@@ -58,14 +91,14 @@ st.sidebar.image(gr_logo)
 # -----------------------------------------------------------
 # Rasters Config
 # -----------------------------------------------------------
-url_path = "https://raw.githubusercontent.com/M-hennen/streamlit_PCI/main/data2/"
+url_path = "https://storage.googleapis.com/pci_rasters/"
 ndvi_rasters = {
     i: [f'{year}_{season}', f'{url_path}seasons/Abergavenny_NDVI_{year}_{season}_harm_cog.tif']
     for i, (year, season) in enumerate(
         ( (year, season) for year in range(2017, 2026) for season in ["Spring", "Summer", "Autumn", "Winter"] )
     )
 }
-ndvi_rasters[34] = ['Latest_NDVI', f'{url_path}latest/Abergavenny_NDVI_2025-09-30_latest_harm_cog.tif']
+ndvi_rasters[34] = ['Latest_NDVI', f'{url_path}latest/Abergavenny_NDVI_2025-10-15_latest_harm_cog.tif']
 
 s1_rasters = {
     i: [f'{year}_{season}', f'{url_path}seasons/Abergavenny_S1_{year}_{season}_harm_cog.tif']
@@ -73,11 +106,11 @@ s1_rasters = {
         ( (year, season) for year in range(2017, 2026) for season in ["Spring", "Summer", "Autumn", "Winter"] )
     )
 }
-s1_rasters[34] = ['Latest_Radar', f'{url_path}latest/Abergavenny_S1_VV_2025-10-02_latest_harm_cog.tif']
-
+s1_rasters[34] = ['Latest_Radar', f'{url_path}latest/Abergavenny_S1_VV_2025-10-15_latest_harm_cog.tif']
+# print(ndvi_rasters)
 symb_dict = {
-    "NDVI": ["rdylgn", (0.2, 0.8)],
-    "Radar": ["gray_r", (-18, -4)],
+    "NDVI": ["rdylgn", (0.2, 0.8), (-0.4, 0.4)],
+    "Radar": ["gray_r", (-18, -4), (-8, 8)],
 }
 
 # -----------------------------------------------------------
@@ -87,16 +120,26 @@ st.title("Forest Health Time Series 🌱")
 
 if "change_detection" not in st.session_state:
     st.session_state.change_detection = False  # default
+if "seasonal_mean" not in st.session_state:
+    st.session_state.seasonal_mean = False  # default
 
-col1, col2 = st.columns([5, 1]) 
+col1, col2, col3 = st.columns([4,1, 1]) 
 
-with col2:
+with col3:
     st.button(
         "Change detection", key="change_detection_btn", 
         on_click=lambda: st.session_state.update(
             change_detection=not st.session_state.change_detection
         )
     )
+if st.session_state.change_detection:
+    with col2: 
+        st.button(
+            "Seasonal mean", key="seasonal_mean_btn", 
+            on_click=lambda: st.session_state.update(
+                seasonal_mean=not st.session_state.seasonal_mean
+            )
+        )
 
 with col1:
     st.session_state["data_select"] = "NDVI"
@@ -110,48 +153,270 @@ with col1:
         horizontal=True
     )
     dataset = s1_rasters if choice == "Radar" else ndvi_rasters
+    rescale = symb_dict[choice][1]
+    rescale_cd = symb_dict[choice][2]
 
 col1, col2 = st.columns([1, 2])
 
 # --- Time Slider ---
 with col1:
+    # --- Initialize session state ---
     if "selected_date" not in st.session_state:
-        st.session_state.selected_date = 34  # default
+        st.session_state.selected_date = 34  # default to the latest
+    if "selected_period" not in st.session_state:
+        st.session_state.selected_period = "Latest"  # default to the latest
 
-    scol1, scol2, scol3 = st.columns([0.5, 6, 0.5])
+    # --- Navigation buttons ---
+    scol1, scol2, scol3 = st.columns(3)
+
     with scol1:
-        if st.button("◀"):
-            st.session_state.selected_date = max(0, st.session_state.selected_date - 1)
+        if st.button("Latest", key="latest_image_button"):
+            st.session_state.selected_date = 34
+
     with scol2:
-        selected_date = st.slider(
-            "Time series (2017-2025)", 
-            min_value=0, 
-            max_value=34, 
-            value=st.session_state.selected_date, 
-            format="%d"
-        )
-    with scol3:    
-        if st.button("▶"):
+        if st.button("◀ Prev"):
+            st.session_state.selected_date = max(0, st.session_state.selected_date - 1)
+
+    with scol3:
+        if st.button("Next ▶"):
             st.session_state.selected_date = min(34, st.session_state.selected_date + 1)
 
+# --- Year/Season dropdowns ---
+# col1, _ = st.columns([2, 1])  # layout for dropdowns
+with col1:
+    c1, c2 = st.columns(2)
+    with c1:
+        select_year = st.selectbox("Select Year", list(range(2017, 2026)), index=8)
+    with c2:
+        select_season = st.selectbox("Select Season", ["Spring", "Summer", "Autumn", "Winter"], index=1)
+
+    selected_period = f"{select_year}_{select_season}"
+
+    # Update only if the selection changed
+    if selected_period != st.session_state.selected_period:
+        st.session_state.selected_period = selected_period
+
+        if any(v[0] == selected_period for v in dataset.values()):
+            st.session_state.selected_date = next(
+                k for k, v in dataset.items() if v[0] == selected_period
+            )
+
+# st.write("Selected date index:", st.session_state.selected_date)
+selected_date = st.session_state.selected_date
 # --- Change Detection Expander ---
 with col1.expander("Change Detection Settings", expanded=False):
     scol1, scol2 = st.columns(2)
     with scol1:
-        compare_year = st.selectbox("Comparison Year", list(range(2017, 2026)), index=1)
+        compare_year = st.selectbox("Comparison Year", list(range(2017, 2026)), index=8)
     with scol2:
-        compare_season = st.selectbox("Comparison Season", ["Spring", "Summer", "Autumn", "Winter"], index=2)
+        compare_season = st.selectbox("Comparison Season", ["Spring", "Summer", "Autumn", "Winter"], index=1)
 
     compare_period = f"{compare_year}_{compare_season}"
     matches = [k for k, v in dataset.items() if v[0] == compare_period]
-    compare_date = matches[0] if matches else None      
-
+    compare_date = matches[0] if matches else None     
     # Load CSV
     df = pd.read_csv("data2/ndvi_time_series.csv")
 
     # Compute mean NDVI by year + season
     seasons_df = df.groupby(['year','season'])['value'].mean().reset_index()
     seasons_df['id'] = seasons_df.apply(lambda row: f"{row['year']}_{row['season']}", axis=1)
+    
+    # Display selected date
+    if st.session_state.change_detection:
+        st.markdown(f"Comparing **{dataset[selected_date][0]}** to **{compare_period}**")
+
+with col1:
+    # os.environ["TITILER_ENDPOINT"] = "https://giswqs-titiler-endpoint.hf.space"
+    titiler = os.environ["TITILER_ENDPOINT"] = "https://titiler.xyz"
+    if st.session_state.change_detection:
+        if selected_date == compare_date:
+            st.warning("Pick two different dates.")
+        else:
+            before_path = dataset[selected_date][1]
+            after_path  = dataset[compare_date][1]
+
+            with rasterio.open(before_path) as src_before:
+                before = src_before.read(1)
+                profile = src_before.profile
+                nodata_before = src_before.nodata
+
+            with rasterio.open(after_path) as src_after:
+                after = src_after.read(1)
+                nodata_after = src_after.nodata
+
+            # Compute difference
+            delta = before - after
+
+            # Build a valid mask based on input nodata
+            valid_mask = np.ones_like(delta, dtype=bool)
+            if nodata_before is not None:
+                valid_mask &= before != nodata_before
+            if nodata_after is not None:
+                valid_mask &= after != nodata_after
+
+            # Set invalid pixels to nodata
+            nodata_val = -9999
+            delta[~valid_mask] = nodata_val
+
+            # ---------------------------
+            # 4. Save delta as temporary GeoTIFF
+            # ---------------------------
+            with tempfile.NamedTemporaryFile(suffix=".tif", delete=False) as tmp:
+                delta_path = tmp.name
+
+            profile_out = profile.copy()
+            profile_out.update(dtype=rasterio.float32, count=1, compress='lzw', nodata=nodata_val)
+
+            with rasterio.open(delta_path, 'w', **profile_out) as dst:
+                dst.write(delta.astype(rasterio.float32), 1)
+
+            # ---------------------------
+            # 5. Convert to proper COG
+            # ---------------------------
+            cog_tmp_path = delta_path.replace(".tif", "_cog.tif")
+            dst_kwargs = cog_profiles.get("deflate")
+
+            cog_translate(
+                source=delta_path,
+                dst_path=cog_tmp_path,
+                dst_kwargs=dst_kwargs,
+                add_mask=True,        # preserve masked pixels
+                in_memory=False,
+                web_optimized=True
+            )
+
+            # ---------------------------
+            # 6. Push to GCP
+            # ---------------------------
+            # Load GCP credentials from Streamlit secrets
+            gcp_info = st.secrets["gcp"]
+            creds = storage.Client.from_service_account_info(gcp_info)
+
+            bucket_name = gcp_info["bucket_name"]
+            bucket = creds.bucket(bucket_name)
+
+            # Define destination path inside the bucket
+            blob_name = f"seasons/delta_{choice}_cog_{selected_date}_vs_{compare_date}.tif"
+            blob = bucket.blob(blob_name)
+
+            # Upload the COG file
+            blob.upload_from_filename(cog_tmp_path, content_type="image/tiff")
+
+            # Make it public (optional)
+            # blob.make_public()
+
+            # Construct the public URL
+            cog_url = f"https://storage.googleapis.com/{bucket_name}/{blob_name}"
+
+            
+            print("COG URL:", cog_url)
+
+# -----------------------------------------------------------
+# Map Display
+# -----------------------------------------------------------
+with col2:
+    if st.session_state.change_detection:
+        # Add tick emoji to change detection title
+        st.markdown("**Change Detection** ✅")
+        st.markdown(f"Comparing **{dataset[selected_date][0]}** to **{compare_period}**")
+        if selected_date == compare_date:
+            st.warning("Pick two different dates.")
+    else:
+        st.markdown(f"Displaying **{dataset[selected_date][0]}**")
+
+    date_id = ndvi_rasters[selected_date][0]
+    
+    region = "data2/TR0001_01_TR0001_01_boundary.geojson"
+    gdf = gpd.read_file(region)
+    total_bounds = gdf.total_bounds
+    lon_min, lat_min, lon_max, lat_max = total_bounds
+    FIXED_BOUNDS = [
+        [lat_min, lon_min],  # Southwest Corner
+        [lat_max, lon_max]   # Northeast Corner
+    ]
+    center_lat = (lat_min + lat_max) / 2
+    center_lon = (lon_min + lon_max) / 2
+
+    ZOOM_LEVEL = 13 
+
+    BBOX_EXTENT = [lon_min, lat_min, lon_max, lat_max] # [minx, miny, maxx, maxy]
+
+    # m = leafmap.Map(center=[51.787, -3.023], basemap="Esri.WorldImagery")
+    m = leafmap.Map(
+        center=[center_lat, center_lon], 
+        zoom_start=ZOOM_LEVEL,
+        basemap="Esri.WorldImagery"
+    )
+
+    # # Add basemap
+    esri_satellite = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+    m.add_tile_layer(url=esri_satellite, name="Esri Satellite", attribution="Tiles © Esri")
+    import requests
+    resp = requests.head(dataset[selected_date][1])
+    if resp.status_code == 200:
+        if st.session_state.change_detection and selected_date != compare_date:
+            # Add to map in Streamlit using leafmap
+            m.add_cog_layer(
+                after_path, 
+                bands=[1], 
+                name=f"{compare_period}", 
+                rescale=f"{rescale[0]}, {rescale[1]}",
+                colormap_name=symb_dict[choice][0]
+                )
+            m.add_cog_layer(
+                before_path, 
+                bands=[1], 
+                name=f"{dataset[selected_date][0]}", 
+                rescale=f"{rescale[0]}, {rescale[1]}",
+                colormap_name=symb_dict[choice][0]
+                )
+            m.add_cog_layer(
+                cog_url, 
+                bands=[1], 
+                titiler_endpoint=titiler, 
+                name="Δ Change", 
+                rescale=f"{rescale_cd[0]}, {rescale_cd[1]}",
+                colormap_name="coolwarm_r", 
+                opacity=1
+                )
+            
+        else:
+            m.add_cog_layer(
+            dataset[selected_date][1],
+            bands=[1],
+            # titiler_endpoint=titiler,
+            name=f"{dataset[selected_date][0]}",
+            rescale=f"{rescale[0]}, {rescale[1]}",
+            colormap_name=symb_dict[choice][0]
+            )
+
+    else: 
+        st.error(f"{choice} data not available for {date_id}")
+ 
+    m.fit_bounds(FIXED_BOUNDS)
+    m.add_geojson(region, layer_name="AOI")
+    m.add_layer_control()
+
+    m.to_streamlit(height=500)
+
+with col1:
+    if choice == "Radar":
+        st.pyplot(
+            custom_colourbar(
+                'gray', 
+                symb_dict[choice][1][0], 
+                symb_dict[choice][1][1], 
+                label="Radar Backscatter ($\sigma^0$ in dB)")
+        )
+    else:
+        st.pyplot(custom_colourbar('RdYlGn', symb_dict[choice][1][0], symb_dict[choice][1][1], label=f"{choice}"))
+    if st.session_state.change_detection and selected_date != compare_date:
+        st.pyplot(custom_colourbar('coolwarm_r', symb_dict[choice][2][0], symb_dict[choice][2][1], label=f"{choice} Δ Change"))
+
+    if st.session_state.change_detection and selected_date != compare_date:
+        st.write(f"✅ Uploaded ΔNDVI COG to Google Cloud Storage:")
+        st.write(cog_url)
+
 
 # --- Time Series Expander ---
 with col1.expander("📈 Show NDVI Time Series", expanded=False):
@@ -164,86 +429,15 @@ with col1.expander("📈 Show NDVI Time Series", expanded=False):
     ax.set_xticks(xticks[::3])
     plt.xticks(rotation=45)
     st.pyplot(fig)
-
-# -----------------------------------------------------------
-# Map Display
-# -----------------------------------------------------------
-with col2:
-    if st.session_state.change_detection:
-        st.markdown(f"Comparing **{dataset[selected_date][0]}** to **{compare_period}**")
-        if selected_date == compare_date:
-            st.warning("Pick two different dates.")
-        else:
-            before_path = "data2/latest/Abergavenny_NDVI_2025-09-30_latest_harm_cog.tif" #'dataset[selected_date][1]
-            after_path  = "data2/seasons/Abergavenny_NDVI_2020_Spring_harm_cog.tif" #'dataset[compare_date][1]
-
-            ndvi_before, prof = load_ndvi(before_path)
-            ndvi_after, _ = load_ndvi(after_path)
-
-            delta = ndvi_after - ndvi_before
-            rel_change = delta / (np.abs(ndvi_before) + 1e-6)
-
-            mean_before = np.nanmean(ndvi_before)
-            std_before = np.nanstd(ndvi_before)
-
-            delta_thresh_loss = -std_before
-            delta_thresh_gain = std_before
-
-            cat = np.full(delta.shape, np.nan, dtype=np.float32)
-            cat[(delta <= delta_thresh_loss)] = 1   # loss
-            cat[(delta >= delta_thresh_gain)] = 2   # gain
-
-            delta_path = save_temp_raster(delta, prof, "_delta.tif")
-            profile_out = prof.copy()
-            profile_out.update(dtype=rasterio.float32, nodata=np.nan)
-            cat_path   = save_temp_raster(cat, profile_out, "_cat.tif")
-
-    date_id = ndvi_rasters[selected_date][0]
-    st.write(f"Displaying rasters for: {date_id}")
-
-    os.environ["TITILER_ENDPOINT"] = "https://giswqs-titiler-endpoint.hf.space"
-
-    m = leafmap.Map(center=[51.787, -3.023], basemap="Esri.WorldImagery")
-
-    # # Add basemap
-    esri_satellite = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-    m.add_tile_layer(url=esri_satellite, name="Esri Satellite", attribution="Tiles © Esri")
-    import requests
-    resp = requests.head(dataset[selected_date][1])
-    if resp.status_code == 200:
-        test_url = dataset[selected_date][1]  
-        print("Loading COG from:", test_url)  
-        # Single-band grayscale
-        m.add_cog_layer(
-            test_url,
-            bands=[1],
-            name="NDVI (COG)",
-            colormap_name="rdylgn"
-        )
-        if st.session_state.change_detection and selected_date != compare_date:
-            m.add_raster(
-                delta_path,
-                bands=[1],
-                vmin=-np.nanmax(np.abs(delta)),
-                vmax=np.nanmax(np.abs(delta)),
-                colormap="rdylgn",
-                layer_name=f"ΔNDVI Change",
-                opacity=1,
-            )
-
-
-    else: 
-        st.error(f"{choice} data not available for {date_id}")
-
-    region = "data2/TR0001_01_TR0001_01_boundary.geojson"
-    m.add_layer_control()
-    m.add_geojson(region, layer_name="AOI")
-    m.zoom_to_bounds(ndvi_rasters[selected_date][1])
-    m.to_streamlit(height=500)
-
     st.markdown(
         """
     This example shows how to use a Streamlit slider to switch between raster layers across time.
     The rasters are displayed as overlays on a satellite basemap.
     """
     )
+
+
+
+  
+
+    
