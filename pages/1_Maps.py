@@ -4,7 +4,6 @@ import tempfile
 import numpy as np
 from rio_cogeo.cogeo import cog_translate
 from rio_cogeo.profiles import cog_profiles
-from github import Github
 import os
 import geopandas as gpd
 import pandas as pd
@@ -13,6 +12,7 @@ from google.cloud import storage
 import matplotlib as mpl
 import rasterio
 from plotting import add_styled_colorbar
+from weather_functions import get_season
 
 # -----------------------------------------------------------
 # Streamlit Config
@@ -122,6 +122,8 @@ if "change_detection" not in st.session_state:
     st.session_state.change_detection = False  # default
 if "seasonal_mean" not in st.session_state:
     st.session_state.seasonal_mean = False  # default
+if "comapare_period" not in st.session_state:
+    st.session_state.compare_period = "2025_Summer"  # default
 
 col1, col2, col3 = st.columns([4,1, 1]) 
 
@@ -158,16 +160,24 @@ with col1:
 
 col1, col2 = st.columns([1, 2])
 
-# --- Time Slider ---
+# --- Date Selector ---
 with col1:
     # --- Initialize session state ---
     if "selected_date" not in st.session_state:
         st.session_state.selected_date = 34  # default to the latest
+    if "compared_date" not in st.session_state:
+        st.session_state.compared_date = 33
     if "selected_period" not in st.session_state:
         st.session_state.selected_period = "Latest"  # default to the latest
+    if "compared_period" not in st.session_state:
+        st.session_state.compared_period = "2025_Summer"  # default to the latest
+    
+    if st.session_state.change_detection:
+        st.write(f"**Target period (after)**:")
 
     # --- Navigation buttons ---
     scol1, scol2, scol3 = st.columns(3)
+    
 
     with scol1:
         if st.button("Latest", key="latest_image_button"):
@@ -180,13 +190,15 @@ with col1:
     with scol3:
         if st.button("Next ▶"):
             st.session_state.selected_date = min(34, st.session_state.selected_date + 1)
-
+    print("Selected season:", dataset[st.session_state.selected_date][0].split("_")[1])
 # --- Year/Season dropdowns ---
 # col1, _ = st.columns([2, 1])  # layout for dropdowns
-with col1:
+# with col1:
     c1, c2 = st.columns(2)
+    
     with c1:
         select_year = st.selectbox("Select Year", list(range(2017, 2026)), index=8)
+        
     with c2:
         select_season = st.selectbox("Select Season", ["Spring", "Summer", "Autumn", "Winter"], index=1)
 
@@ -201,39 +213,61 @@ with col1:
                 k for k, v in dataset.items() if v[0] == selected_period
             )
 
-# st.write("Selected date index:", st.session_state.selected_date)
-selected_date = st.session_state.selected_date
-# --- Change Detection Expander ---
-with col1.expander("Change Detection Settings", expanded=False):
-    scol1, scol2 = st.columns(2)
-    with scol1:
-        compare_year = st.selectbox("Comparison Year", list(range(2017, 2026)), index=8)
-    with scol2:
-        compare_season = st.selectbox("Comparison Season", ["Spring", "Summer", "Autumn", "Winter"], index=1)
+    # st.write("Selected date index:", st.session_state.selected_date)
+    selected_date = st.session_state.selected_date
 
-    compare_period = f"{compare_year}_{compare_season}"
-    matches = [k for k, v in dataset.items() if v[0] == compare_period]
-    compare_date = matches[0] if matches else None     
-    # Load CSV
-    df = pd.read_csv("data2/ndvi_time_series.csv")
 
-    # Compute mean NDVI by year + season
-    seasons_df = df.groupby(['year','season'])['value'].mean().reset_index()
-    seasons_df['id'] = seasons_df.apply(lambda row: f"{row['year']}_{row['season']}", axis=1)
-    
-    # Display selected date
+    #=== Comparison period selection ===#
     if st.session_state.change_detection:
-        st.markdown(f"Comparing **{dataset[selected_date][0]}** to **{compare_period}**")
+        # if seasonal not selected
+        if st.session_state.seasonal_mean == False:
+            st.write(f"**Compared period (before)**")
+            c1, c2 = st.columns(2)
+            with c1:
+                compare_year = st.selectbox("Comparison Year", list(range(2017, 2026)), index=8)
+            with c2:
+                compare_season = st.selectbox("Comparison Season", ["Spring", "Summer", "Autumn", "Winter"], index=1)        
+
+            compare_period = f"{compare_year}_{compare_season}"
+
+            # Update only if the selection changed
+            if compare_period != st.session_state.compared_period:
+                st.session_state.compared_period = compare_period
+
+                if any(v[0] == compare_period for v in dataset.values()):
+                    st.session_state.compared_date = next(
+                        k for k, v in dataset.items() if v[0] == compare_period
+                    )
+
+            # st.write("Selected date index:", st.session_state.selected_date)
+            compared_date = st.session_state.compared_date 
+        else:
+            if selected_period == "Latest":
+                selected_season = get_season()
+                st.write(f"**Compared period (before)**: {selected_season}")
+            else:
+                selected_season = dataset[st.session_state.selected_date][0].split("_")[1]
+            compared_date = 99
+            compare_period = selected_season
+
+
+    
 
 with col1:
     # os.environ["TITILER_ENDPOINT"] = "https://giswqs-titiler-endpoint.hf.space"
     titiler = os.environ["TITILER_ENDPOINT"] = "https://titiler.xyz"
     if st.session_state.change_detection:
-        if selected_date == compare_date:
+        if selected_date == compared_date:
             st.warning("Pick two different dates.")
         else:
             before_path = dataset[selected_date][1]
-            after_path  = dataset[compare_date][1]
+            if st.session_state.seasonal_mean:
+                if choice == "NDVI":
+                    after_path = f'{url_path}averages/Abergavenny_{choice}_Mean_{selected_season}_2018-2024_harm_cog.tif'
+                else:
+                    after_path = f'{url_path}averages/Abergavenny_S1_Mean_{selected_season}_2018-2024_harm_cog.tif'
+            else:
+                after_path = dataset[compared_date][1]
 
             with rasterio.open(before_path) as src_before:
                 before = src_before.read(1)
@@ -296,7 +330,7 @@ with col1:
             bucket = creds.bucket(bucket_name)
 
             # Define destination path inside the bucket
-            blob_name = f"seasons/delta_{choice}_cog_{selected_date}_vs_{compare_date}.tif"
+            blob_name = f"seasons/delta_{choice}_cog_{selected_date}_vs_{compared_date}.tif"
             blob = bucket.blob(blob_name)
 
             # Upload the COG file
@@ -318,8 +352,10 @@ with col2:
     if st.session_state.change_detection:
         # Add tick emoji to change detection title
         st.markdown("**Change Detection** ✅")
+        if st.session_state.seasonal_mean:
+            st.markdown("**Seasonal Mean** ✅")
         st.markdown(f"Comparing **{dataset[selected_date][0]}** to **{compare_period}**")
-        if selected_date == compare_date:
+        if selected_date == compared_date:
             st.warning("Pick two different dates.")
     else:
         st.markdown(f"Displaying **{dataset[selected_date][0]}**")
@@ -354,7 +390,7 @@ with col2:
     import requests
     resp = requests.head(dataset[selected_date][1])
     if resp.status_code == 200:
-        if st.session_state.change_detection and selected_date != compare_date:
+        if st.session_state.change_detection and selected_date != compared_date:
             # Add to map in Streamlit using leafmap
             m.add_cog_layer(
                 after_path, 
@@ -400,6 +436,9 @@ with col2:
     m.to_streamlit(height=500)
 
 with col1:
+    if st.session_state.change_detection and selected_date != compared_date:
+        st.pyplot(custom_colourbar('coolwarm_r', symb_dict[choice][2][0], symb_dict[choice][2][1], label=f"{choice} Δ Change"))
+
     if choice == "Radar":
         st.pyplot(
             custom_colourbar(
@@ -410,16 +449,19 @@ with col1:
         )
     else:
         st.pyplot(custom_colourbar('RdYlGn', symb_dict[choice][1][0], symb_dict[choice][1][1], label=f"{choice}"))
-    if st.session_state.change_detection and selected_date != compare_date:
-        st.pyplot(custom_colourbar('coolwarm_r', symb_dict[choice][2][0], symb_dict[choice][2][1], label=f"{choice} Δ Change"))
-
-    if st.session_state.change_detection and selected_date != compare_date:
-        st.write(f"✅ Uploaded ΔNDVI COG to Google Cloud Storage:")
+    
+    if st.session_state.change_detection and selected_date != compared_date:
+        st.write(f"✅ Uploaded Δ Delta COG to Google Cloud Storage:")
         st.write(cog_url)
 
 
 # --- Time Series Expander ---
 with col1.expander("📈 Show NDVI Time Series", expanded=False):
+    df = pd.read_csv("data2/ndvi_time_series.csv")
+
+    # Compute mean NDVI by year + season
+    seasons_df = df.groupby(['year','season'])['value'].mean().reset_index()
+    seasons_df['id'] = seasons_df.apply(lambda row: f"{row['year']}_{row['season']}", axis=1)
     fig, ax = plt.subplots(figsize=(8, 4))
     ax.plot(seasons_df["id"], seasons_df["value"], marker="o", linestyle="-")
     ax.set_xlabel("Season")
