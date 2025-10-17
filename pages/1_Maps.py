@@ -1,4 +1,7 @@
 import streamlit as st
+import folium
+from folium import GeoJson, Marker
+from folium.plugins import MarkerCluster
 import leafmap.foliumap as leafmap
 import tempfile
 import numpy as np
@@ -13,7 +16,7 @@ import matplotlib as mpl
 import rasterio
 from plotting import add_styled_colorbar
 from weather_functions import get_season
-
+from change_detection_alert import change_alert
 # -----------------------------------------------------------
 # Streamlit Config
 # -----------------------------------------------------------
@@ -112,6 +115,9 @@ symb_dict = {
     "NDVI": ["rdylgn", (0.2, 0.8), (-0.4, 0.4)],
     "Radar": ["gray_r", (-18, -4), (-8, 8)],
 }
+# Load AOI
+aoi = f"data2/TR0001_01_TR0001_01_boundary.geojson"
+
 
 # -----------------------------------------------------------
 # UI Layout
@@ -260,37 +266,46 @@ with col1:
         if selected_date == compared_date:
             st.warning("Pick two different dates.")
         else:
-            before_path = dataset[selected_date][1]
+            previous_path = dataset[selected_date][1]
             if st.session_state.seasonal_mean:
                 if choice == "NDVI":
-                    after_path = f'{url_path}averages/Abergavenny_{choice}_Mean_{selected_season}_2018-2024_harm_cog.tif'
+                    current_path = f'{url_path}averages/Abergavenny_{choice}_Mean_{selected_season}_2018-2024_harm_cog.tif'
                 else:
-                    after_path = f'{url_path}averages/Abergavenny_S1_Mean_{selected_season}_2018-2024_harm_cog.tif'
+                    current_path = f'{url_path}averages/Abergavenny_S1_Mean_{selected_season}_2018-2024_harm_cog.tif'
             else:
-                after_path = dataset[compared_date][1]
+                current_path = dataset[compared_date][1]
 
-            with rasterio.open(before_path) as src_before:
-                before = src_before.read(1)
-                profile = src_before.profile
-                nodata_before = src_before.nodata
+            # with rasterio.open(before_path) as src_before:
+            #     before = src_before.read(1)
+            #     profile = src_before.profile
+            #     nodata_before = src_before.nodata
 
-            with rasterio.open(after_path) as src_after:
-                after = src_after.read(1)
-                nodata_after = src_after.nodata
+            # with rasterio.open(after_path) as src_after:
+            #     after = src_after.read(1)
+            #     nodata_after = src_after.nodata
 
-            # Compute difference
-            delta = before - after
+            # # Compute difference
+            # delta = before - after
 
-            # Build a valid mask based on input nodata
-            valid_mask = np.ones_like(delta, dtype=bool)
-            if nodata_before is not None:
-                valid_mask &= before != nodata_before
-            if nodata_after is not None:
-                valid_mask &= after != nodata_after
+            alerts, delta, profile, aoi_mask, current = change_alert(
+                previous_path, 
+                current_path, 
+                aoi, 
+                change_thresh=0.2, 
+                prev_thresh=0.6
+                )
+            
+            alert_points_wgs = alerts.to_crs(epsg=4326)
+            print ("Number of alert points: ", len(alert_points_wgs))
+
+            # # Build a valid mask based on input nodata
+            # valid_mask = np.ones_like(delta, dtype=bool)
+            # if nodata_val is not None:
+            #     valid_mask &= current != nodata_val
 
             # Set invalid pixels to nodata
             nodata_val = -9999
-            delta[~valid_mask] = nodata_val
+            delta[aoi_mask == 0] = nodata_val
 
             # ---------------------------
             # 4. Save delta as temporary GeoTIFF
@@ -345,6 +360,7 @@ with col1:
             
             print("COG URL:", cog_url)
 
+
 # -----------------------------------------------------------
 # Map Display
 # -----------------------------------------------------------
@@ -362,8 +378,8 @@ with col2:
 
     date_id = ndvi_rasters[selected_date][0]
     
-    region = "data2/TR0001_01_TR0001_01_boundary.geojson"
-    gdf = gpd.read_file(region)
+    
+    gdf = gpd.read_file(aoi)
     total_bounds = gdf.total_bounds
     lon_min, lat_min, lon_max, lat_max = total_bounds
     FIXED_BOUNDS = [
@@ -393,14 +409,14 @@ with col2:
         if st.session_state.change_detection and selected_date != compared_date:
             # Add to map in Streamlit using leafmap
             m.add_cog_layer(
-                after_path, 
+                current_path, 
                 bands=[1], 
                 name=f"{compare_period}", 
                 rescale=f"{rescale[0]}, {rescale[1]}",
                 colormap_name=symb_dict[choice][0]
                 )
             m.add_cog_layer(
-                before_path, 
+                previous_path, 
                 bands=[1], 
                 name=f"{dataset[selected_date][0]}", 
                 rescale=f"{rescale[0]}, {rescale[1]}",
@@ -415,7 +431,15 @@ with col2:
                 colormap_name="coolwarm_r", 
                 opacity=1
                 )
-            
+                
+            # --- Add alert points ---
+            m.add_points_from_xy(
+                alerts,
+                x="x",
+                y="y",
+                spin=True,
+            )
+
         else:
             m.add_cog_layer(
             dataset[selected_date][1],
@@ -430,7 +454,7 @@ with col2:
         st.error(f"{choice} data not available for {date_id}")
  
     m.fit_bounds(FIXED_BOUNDS)
-    m.add_geojson(region, layer_name="AOI")
+    m.add_geojson(aoi, layer_name="AOI")
     m.add_layer_control()
 
     m.to_streamlit(height=500)
