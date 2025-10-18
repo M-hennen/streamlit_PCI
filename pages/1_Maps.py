@@ -294,9 +294,9 @@ with col1:
                 change_thresh=0.2, 
                 prev_thresh=0.6
                 )
-            
-            alert_points_wgs = alerts.to_crs(epsg=4326)
-            print ("Number of alert points: ", len(alert_points_wgs))
+
+            print ("Number of alert points: ", len(alerts))
+            print("alerts head:\n", alerts.head())
 
             # # Build a valid mask based on input nodata
             # valid_mask = np.ones_like(delta, dtype=bool)
@@ -431,15 +431,6 @@ with col2:
                 colormap_name="coolwarm_r", 
                 opacity=1
                 )
-                
-            # --- Add alert points ---
-            m.add_points_from_xy(
-                alerts,
-                x="x",
-                y="y",
-                spin=True,
-            )
-
         else:
             m.add_cog_layer(
             dataset[selected_date][1],
@@ -458,6 +449,37 @@ with col2:
     m.add_layer_control()
 
     m.to_streamlit(height=500)
+
+if len(alerts) > 0:
+    with col2.expander("Alerts Map"):
+        # --- Create map ---
+        m = leafmap.Map(
+            center=[center_lat, center_lon], 
+            zoom_start=ZOOM_LEVEL,
+            basemap="Esri.WorldImagery"
+        )
+
+        # Add Esri satellite basemap
+        esri_satellite = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+        # m.add_tile_layer(url=esri_satellite, name="Esri Satellite", attribution="Tiles © Esri")
+
+        # --- Load alerts ---
+        # alerts = "https://storage.googleapis.com/pci_rasters/change_alert_points.csv"    
+
+        # --- Add AOI & controls ---
+        m.add_geojson(aoi, layer_name="AOI")
+        m.add_points_from_xy(
+                alerts,
+                x="x",
+                y="y",
+                icon_colors=["white"],
+                icon_names=["info"],
+            )
+        m.add_layer_control()
+        m.fit_bounds(FIXED_BOUNDS)
+
+        # --- Render in Streamlit ---
+        m.to_streamlit(height=500)
 
 with col1:
     if st.session_state.change_detection and selected_date != compared_date:
